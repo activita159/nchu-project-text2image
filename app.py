@@ -210,10 +210,26 @@ if "current_prompt" not in st.session_state:
     st.session_state.current_prompt = ""
 if "seed_used" not in st.session_state:
     st.session_state.seed_used = 0
+if "pending_prompt" not in st.session_state:
+    st.session_state.pending_prompt = ""
+
+st.markdown("<div style='display:flex;gap:6px;flex-wrap:wrap;margin-bottom:12px'>", unsafe_allow_html=True)
+chip_cols = st.columns(4)
+for i, (label, sug_prompt) in enumerate(SUGGESTIONS):
+    with chip_cols[i]:
+        st.markdown('<div class="chip-btn">', unsafe_allow_html=True)
+        if st.button(label, key=f"sug_{i}", use_container_width=True):
+            st.session_state.pending_prompt = sug_prompt
+            st.rerun()
+        st.markdown("</div>", unsafe_allow_html=True)
+
+init_prompt = st.session_state.pending_prompt
+st.session_state.pending_prompt = ""
 
 with st.container():
     prompt = st.text_area(
         "",
+        value=init_prompt,
         placeholder="輸入圖片描述，例如：A robot reading a book under a cherry tree at sunset...",
         label_visibility="collapsed",
         key="prompt_input",
@@ -222,16 +238,6 @@ with st.container():
     send_col1, send_col2, send_col3 = st.columns([1, 1, 1])
     with send_col2:
         generate_clicked = st.button("↑", use_container_width=True)
-
-st.markdown("<div style='display:flex;gap:6px;flex-wrap:wrap;margin-bottom:12px'>", unsafe_allow_html=True)
-chip_cols = st.columns(4)
-for i, (label, sug_prompt) in enumerate(SUGGESTIONS):
-    with chip_cols[i]:
-        st.markdown('<div class="chip-btn">', unsafe_allow_html=True)
-        if st.button(label, key=f"sug_{i}", use_container_width=True):
-            st.session_state.prompt_input = sug_prompt
-            st.rerun()
-        st.markdown("</div>", unsafe_allow_html=True)
 st.markdown("</div>", unsafe_allow_html=True)
 
 with st.expander("⚙ 進階設定"):
@@ -436,6 +442,6 @@ if st.session_state.history:
             st.markdown('<div class="history-btn">', unsafe_allow_html=True)
             truncated = (hist_prompt[:28] + "…") if len(hist_prompt) > 30 else hist_prompt
             if st.button(truncated, key=f"hist_{idx}", use_container_width=True, help=hist_prompt):
-                st.session_state.prompt_input = hist_prompt
+                st.session_state.pending_prompt = hist_prompt
                 st.rerun()
             st.markdown("</div>", unsafe_allow_html=True)
