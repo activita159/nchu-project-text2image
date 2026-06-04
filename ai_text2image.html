@@ -1,0 +1,739 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="theme-color" content="#0a0a1a">
+<title>Cosmos3 Text2Image</title>
+<style>
+*{margin:0;padding:0;box-sizing:border-box}
+:root{
+  --bg:#0a0a1a;
+  --surface:#141428;
+  --surface2:#1e1e3a;
+  --text:#e8e8f0;
+  --text2:#a0a0bb;
+  --accent:#6c5ce7;
+  --accent2:#a855f7;
+  --accent-glow:rgba(108,92,231,.3);
+  --danger:#ff6b6b;
+  --success:#51cf66;
+  --warn:#f0a040;
+  --radius:16px;
+  --radius-sm:10px;
+  --font:"Inter","Segoe UI",system-ui,-apple-system,sans-serif
+}
+html,body{height:100%;overflow:hidden}
+body{
+  background:var(--bg);
+  color:var(--text);
+  font-family:var(--font);
+  display:flex;
+  justify-content:center;
+  align-items:center;
+  -webkit-tap-highlight-color:transparent;
+  user-select:none;
+  -webkit-user-select:none
+}
+body::before{
+  content:'';
+  position:fixed;inset:0;
+  background:
+    radial-gradient(ellipse at 20% 0%,var(--accent-glow) 0%,transparent 50%),
+    radial-gradient(ellipse at 80% 100%,rgba(168,85,247,.2) 0%,transparent 50%);
+  pointer-events:none;z-index:0
+}
+.app{
+  position:relative;z-index:1;
+  width:100%;max-width:440px;
+  height:100vh;height:100dvh;
+  display:flex;flex-direction:column;
+  overflow:hidden
+}
+.header{
+  padding:12px 20px 8px;
+  text-align:center;
+  flex-shrink:0
+}
+.header h1{
+  font-size:22px;font-weight:700;
+  background:linear-gradient(135deg,var(--accent),var(--accent2));
+  -webkit-background-clip:text;-webkit-text-fill-color:transparent;
+  background-clip:text;
+  letter-spacing:-.5px
+}
+.header .sub{
+  font-size:11px;color:var(--text2);margin-top:2px
+}
+.main{
+  flex:1;overflow-y:auto;overflow-x:hidden;
+  padding:0 16px 16px;
+  -webkit-overflow-scrolling:touch;
+  scroll-behavior:smooth
+}
+.prompt-wrap{
+  position:relative;
+  margin-bottom:12px
+}
+.prompt-wrap textarea{
+  width:100%;
+  min-height:56px;max-height:120px;
+  padding:14px 48px 14px 16px;
+  border:2px solid var(--surface2);
+  border-radius:var(--radius);
+  background:var(--surface);
+  color:var(--text);
+  font-family:var(--font);
+  font-size:15px;
+  resize:none;
+  outline:none;
+  transition:border-color .2s
+}
+.prompt-wrap textarea:focus{border-color:var(--accent)}
+.prompt-wrap textarea::placeholder{color:var(--text2)}
+.prompt-wrap .send-btn{
+  position:absolute;right:8px;bottom:8px;
+  width:36px;height:36px;
+  border-radius:50%;
+  border:none;
+  background:linear-gradient(135deg,var(--accent),var(--accent2));
+  color:#fff;
+  font-size:18px;
+  cursor:pointer;
+  display:flex;align-items:center;justify-content:center;
+  transition:transform .15s,opacity .2s
+}
+.prompt-wrap .send-btn:active{transform:scale(.9)}
+.prompt-wrap .send-btn:disabled{opacity:.4;cursor:not-allowed;transform:none}
+.prompt-wrap .send-btn .spinner{
+  width:18px;height:18px;
+  border:2px solid rgba(255,255,255,.3);
+  border-top-color:#fff;
+  border-radius:50%;
+  animation:spin .6s linear infinite
+}
+@keyframes spin{to{transform:rotate(360deg)}}
+.suggestions{
+  display:flex;gap:6px;flex-wrap:wrap;
+  margin-bottom:12px
+}
+.suggestions .chip{
+  padding:5px 10px;
+  background:var(--surface);
+  border:1px solid var(--surface2);
+  border-radius:14px;
+  font-size:11px;color:var(--text2);
+  cursor:pointer;
+  white-space:nowrap;
+  transition:all .15s
+}
+.suggestions .chip:active{background:var(--accent);color:#fff;border-color:var(--accent)}
+.settings-toggle{
+  display:flex;align-items:center;gap:8px;
+  padding:8px 14px;
+  background:var(--surface);
+  border-radius:var(--radius-sm);
+  margin-bottom:12px;
+  cursor:pointer;
+  font-size:13px;color:var(--text2);
+  border:1px solid transparent;
+  transition:border-color .2s
+}
+.settings-toggle:hover{border-color:var(--surface2)}
+.settings-toggle .arrow{transition:transform .2s;font-size:10px}
+.settings-toggle.open .arrow{transform:rotate(180deg)}
+.settings{
+  display:none;
+  background:var(--surface);
+  border-radius:var(--radius);
+  padding:14px 16px;
+  margin-bottom:12px;
+  border:1px solid var(--surface2)
+}
+.settings.visible{display:block}
+.settings .row{
+  display:flex;align-items:center;
+  justify-content:space-between;
+  margin-bottom:10px
+}
+.settings .row:last-child{margin-bottom:0}
+.settings label{font-size:13px;color:var(--text2)}
+.settings select,.settings input[type=number],.settings input[type=text]{
+  background:var(--surface2);
+  border:1px solid transparent;
+  border-radius:8px;
+  color:var(--text);
+  padding:6px 10px;
+  font-size:13px;
+  font-family:var(--font);
+  max-width:180px;
+  outline:none
+}
+.settings select:focus,.settings input:focus{border-color:var(--accent)}
+.settings input[type=range]{width:140px;accent-color:var(--accent)}
+.settings .val{font-size:12px;color:var(--accent);min-width:28px;text-align:right}
+.settings input[type=checkbox]{width:18px;height:18px;accent-color:var(--accent)}
+.status{
+  text-align:center;
+  font-size:12px;
+  color:var(--text2);
+  padding:4px 0 8px;
+  min-height:24px;
+  white-space:pre-line
+}
+.status.error{color:var(--danger)}
+.status.success{color:var(--success)}
+.status.warn{color:var(--warn)}
+.image-area{
+  position:relative;
+  background:var(--surface);
+  border-radius:var(--radius);
+  border:1px solid var(--surface2);
+  min-height:200px;
+  display:flex;align-items:center;justify-content:center;
+  overflow:hidden;
+  margin-bottom:8px
+}
+.image-area img{width:100%;height:auto;display:block;border-radius:var(--radius)}
+.image-area .placeholder{
+  color:var(--text2);
+  font-size:14px;
+  text-align:center;
+  padding:40px 20px
+}
+.image-area .placeholder .icon{font-size:40px;margin-bottom:8px;display:block}
+.image-actions{
+  display:none;gap:8px;margin-bottom:12px
+}
+.image-actions.visible{display:flex}
+.image-actions button{
+  flex:1;
+  padding:10px;
+  border:none;
+  border-radius:var(--radius-sm);
+  font-size:13px;
+  font-family:var(--font);
+  font-weight:600;
+  cursor:pointer;
+  transition:opacity .2s
+}
+.image-actions button:active{opacity:.7}
+.btn-download{background:linear-gradient(135deg,var(--accent),var(--accent2));color:#fff}
+.btn-copy{background:var(--surface2);color:var(--text)}
+.history{
+  display:flex;gap:6px;flex-wrap:wrap;
+  margin-bottom:12px
+}
+.history .pill{
+  padding:6px 12px;
+  background:var(--surface);
+  border:1px solid var(--surface2);
+  border-radius:20px;
+  font-size:11px;color:var(--text2);
+  cursor:pointer;
+  white-space:nowrap;
+  max-width:160px;
+  overflow:hidden;
+  text-overflow:ellipsis;
+  transition:border-color .2s
+}
+.history .pill:hover{border-color:var(--accent)}
+.history .pill:active{background:var(--surface2)}
+.overlay{
+  position:fixed;inset:0;
+  background:rgba(0,0,0,.9);
+  z-index:100;
+  display:flex;align-items:center;justify-content:center;
+  cursor:pointer;
+  animation:fadeIn .2s
+}
+.overlay img{max-width:95vw;max-height:95vh;object-fit:contain;border-radius:8px}
+@keyframes fadeIn{from{opacity:0}}
+.main::-webkit-scrollbar{width:0}
+.toast{
+  position:fixed;bottom:20px;left:50%;transform:translateX(-50%);
+  background:var(--surface2);
+  color:var(--text);
+  padding:10px 20px;
+  border-radius:20px;
+  font-size:13px;
+  z-index:200;
+  animation:toastIn .3s,toastOut .3s 2s forwards;
+  pointer-events:none
+}
+@keyframes toastIn{from{opacity:0;transform:translateX(-50%) translateY(20px)}}
+@keyframes toastOut{to{opacity:0;transform:translateX(-50%) translateY(-20px)}}
+</style>
+</head>
+<body>
+
+<div class="app">
+  <div class="header">
+    <h1>Cosmos3 Text2Image</h1>
+    <div class="sub">nvidia/Cosmos3-Nano (16B) · 免金鑰 · 已測試可用</div>
+  </div>
+
+  <div class="main" id="main">
+    <div class="prompt-wrap" id="promptWrap">
+      <textarea id="promptInput"
+        placeholder="輸入圖片描述，例如：A robot reading a book under a cherry tree at sunset..."
+        rows="1"
+      ></textarea>
+      <button class="send-btn" id="sendBtn" title="Generate">
+        <span class="send-icon">&#8593;</span>
+      </button>
+    </div>
+
+    <div class="suggestions">
+      <span class="chip" data-prompt="Astronaut in a jungle, cold color palette, muted colors, detailed">&#x1F680; 太空人</span>
+      <span class="chip" data-prompt="A serene Japanese garden with cherry blossoms, pond, wooden bridge">&#x1F338; 日式庭園</span>
+      <span class="chip" data-prompt="Cyberpunk city street at night, neon lights, rain, cinematic lighting">&#x1F303; 賽博朋克</span>
+      <span class="chip" data-prompt="Cute fluffy cat sleeping on a cloud, dreamy soft pastel colors">&#x1F431; 貓咪</span>
+    </div>
+
+    <div class="settings-toggle" id="settingsToggle">
+      <span>&#9881; 進階設定</span>
+      <span class="arrow">&#9660;</span>
+    </div>
+
+    <div class="settings" id="settingsPanel">
+      <div class="row">
+        <label>解析度</label>
+        <select id="resolution">
+          <option value="360p (640x352, fastest)">360p (640×352) 極速 ⚡⚡⚡</option>
+          <option value="480p (832x480, fast)">480p (832×480) 快速 ⚡⚡</option>
+          <option value="720p (1280x720, slow)">720p (1280×720) 高畫質</option>
+        </select>
+      </div>
+      <div class="row">
+        <label>推論步數</label>
+        <input type="range" id="steps" min="15" max="50" value="15" step="1">
+        <span class="val" id="stepsVal">15</span>
+      </div>
+      <div class="row">
+        <label>引導比例</label>
+        <input type="range" id="guidance" min="1" max="10" value="4" step="0.1">
+        <span class="val" id="guidanceVal">4.0</span>
+      </div>
+      <div class="row">
+        <label>負向提示詞</label>
+        <input type="text" id="negativePrompt" placeholder="排除的內容...">
+      </div>
+      <div class="row">
+        <label>隨機種子</label>
+        <input type="checkbox" id="randomizeSeed" checked>
+      </div>
+      <div class="row">
+        <label>種子值</label>
+        <input type="number" id="seed" value="0" min="0" max="999999" disabled>
+      </div>
+    </div>
+
+    <div class="status" id="status"></div>
+
+    <div class="image-area" id="imageArea">
+      <div class="placeholder" id="placeholder">
+        <span class="icon">&#127912;</span>
+        輸入提示詞後點擊送出<br>即可生成圖片
+      </div>
+      <img id="resultImage" style="display:none" alt="Generated image">
+    </div>
+
+    <div class="image-actions" id="imageActions">
+      <button class="btn-download" id="downloadBtn">&#128229; 下載圖片</button>
+      <button class="btn-copy" id="copyPromptBtn">&#128203; 複製提示詞</button>
+    </div>
+
+    <div class="history" id="history"></div>
+  </div>
+</div>
+
+<script>
+(function(){
+  var SPACE_URL = 'https://multimodalart-cosmos3-nano.hf.space';
+
+  var promptInput = document.getElementById('promptInput');
+  var sendBtn = document.getElementById('sendBtn');
+  var sendIcon = sendBtn.querySelector('.send-icon');
+  var settingsToggle = document.getElementById('settingsToggle');
+  var settingsPanel = document.getElementById('settingsPanel');
+  var placeholder = document.getElementById('placeholder');
+  var resultImage = document.getElementById('resultImage');
+  var imageActions = document.getElementById('imageActions');
+  var downloadBtn = document.getElementById('downloadBtn');
+  var copyPromptBtn = document.getElementById('copyPromptBtn');
+  var statusEl = document.getElementById('status');
+  var historyEl = document.getElementById('history');
+
+  var resolutionEl = document.getElementById('resolution');
+  var stepsEl = document.getElementById('steps');
+  var stepsValEl = document.getElementById('stepsVal');
+  var guidanceEl = document.getElementById('guidance');
+  var guidanceValEl = document.getElementById('guidanceVal');
+  var negativePromptEl = document.getElementById('negativePrompt');
+  var randomizeSeedEl = document.getElementById('randomizeSeed');
+  var seedEl = document.getElementById('seed');
+
+  var isGenerating = false;
+  var currentImageUrl = null;
+  var currentPrompt = '';
+
+  promptInput.addEventListener('input', function(){
+    this.style.height = 'auto';
+    this.style.height = Math.min(this.scrollHeight, 120) + 'px';
+  });
+
+  promptInput.addEventListener('keydown', function(e){
+    if(e.key === 'Enter' && !e.shiftKey){
+      e.preventDefault();
+      doGenerate();
+    }
+  });
+
+  sendBtn.addEventListener('click', doGenerate);
+
+  settingsToggle.addEventListener('click', function(){
+    var open = settingsPanel.classList.toggle('visible');
+    this.classList.toggle('open', open);
+  });
+
+  stepsEl.addEventListener('input', function(){ stepsValEl.textContent = this.value; });
+  guidanceEl.addEventListener('input', function(){ guidanceValEl.textContent = parseFloat(this.value).toFixed(1); });
+
+  randomizeSeedEl.addEventListener('change', function(){
+    seedEl.disabled = this.checked;
+  });
+
+  downloadBtn.addEventListener('click', function(){
+    if(!currentImageUrl) return;
+    var a = document.createElement('a');
+    a.href = currentImageUrl;
+    a.download = 'cosmos3_' + Date.now() + '.png';
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+  });
+
+  copyPromptBtn.addEventListener('click', function(){
+    if(!currentPrompt) return;
+    navigator.clipboard.writeText(currentPrompt).then(function(){
+      showToast('已複製提示詞');
+    }).catch(function(){
+      showToast('複製失敗');
+    });
+  });
+
+  resultImage.addEventListener('click', function(){
+    if(!currentImageUrl) return;
+    var overlay = document.createElement('div');
+    overlay.className = 'overlay';
+    var img = document.createElement('img');
+    img.src = currentImageUrl;
+    overlay.appendChild(img);
+    overlay.addEventListener('click', function(){ overlay.remove(); });
+    document.body.appendChild(overlay);
+  });
+
+  resultImage.addEventListener('error', function(){
+    resultImage.style.display = 'none';
+    placeholder.style.display = '';
+    placeholder.innerHTML = '<span class="icon">\u26A0</span>\u5716\u7247\u8F09\u5165\u5931\u6557';
+    imageActions.classList.remove('visible');
+    showStatus('圖片載入失敗', 'error');
+  });
+
+  document.querySelectorAll('.suggestions .chip').forEach(function(chip){
+    chip.addEventListener('click', function(){
+      promptInput.value = this.dataset.prompt;
+      promptInput.style.height = 'auto';
+      promptInput.style.height = Math.min(promptInput.scrollHeight, 120) + 'px';
+      doGenerate();
+    });
+  });
+
+  loadHistory();
+
+  async function doGenerate(){
+    if(isGenerating) return;
+    var prompt = promptInput.value.trim();
+    if(!prompt){
+      showStatus('請輸入提示詞', 'error');
+      promptInput.focus();
+      return;
+    }
+
+    currentPrompt = prompt;
+    isGenerating = true;
+    setLoading(true);
+    showStatus('Cosmos3-Nano 生成中...', '');
+    hideImage();
+
+    try{
+      var result = await callSpace(prompt);
+      currentImageUrl = result.url;
+      var seed = result.seed;
+      await preloadImage(currentImageUrl);
+
+      resultImage.src = currentImageUrl;
+      resultImage.style.display = 'block';
+      placeholder.style.display = 'none';
+      imageActions.classList.add('visible');
+      showStatus('生成成功！種子: ' + seed, 'success');
+      saveToHistory(prompt);
+      loadHistory();
+    }catch(err){
+      console.error(err);
+      showStatus(err.message, 'error');
+    }finally{
+      isGenerating = false;
+      setLoading(false);
+    }
+  }
+
+  function preloadImage(url){
+    return new Promise(function(resolve, reject){
+      var img = new Image();
+      img.onload = function(){ resolve(); };
+      img.onerror = function(){ reject(new Error('圖片載入失敗')); };
+      img.src = url;
+      setTimeout(function(){ reject(new Error('圖片載入逾時')); }, 120000);
+    });
+  }
+
+  function buildImageUrl(imageData){
+    if(!imageData) return '';
+    if(imageData.url && (imageData.url.indexOf('http') === 0 || imageData.url.indexOf('data:') === 0)){
+      return imageData.url;
+    }
+    if(imageData.path){
+      return SPACE_URL + '/gradio_api/file=' + imageData.path;
+    }
+    if(imageData.url){
+      return SPACE_URL + '/gradio_api/file=' + imageData.url;
+    }
+    return '';
+  }
+
+  // ===== Cosmos3-Nano API =====
+
+  async function callSpace(prompt){
+    var params = {
+      mode: 'Image',
+      prompt: prompt,
+      image: null,
+      resolution: resolutionEl.value,
+      num_frames: 65,
+      steps: parseInt(stepsEl.value),
+      guidance: parseFloat(guidanceEl.value),
+      enable_sound: false,
+      negative_prompt: negativePromptEl.value || '',
+      seed: parseInt(seedEl.value) || 0,
+      randomize_seed: randomizeSeedEl.checked
+    };
+
+    var submitResp = await fetch(SPACE_URL + '/gradio_api/call/v2/generate', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(params)
+    });
+
+    if(!submitResp.ok){
+      var txt = await submitResp.text().catch(function(){ return ''; });
+      throw new Error('連線失敗 (' + submitResp.status + ')\n' + txt.substring(0, 200));
+    }
+
+    var submitData = await submitResp.json();
+
+    // Direct response
+    if(submitData.data && Array.isArray(submitData.data) && submitData.data.length){
+      return { url: buildImageUrl(submitData.data[0]), seed: submitData.data[2] || 0 };
+    }
+
+    if(!submitData.event_id){
+      throw new Error('伺服器未返回 event_id');
+    }
+
+    // SSE stream
+    var sseUrl = SPACE_URL + '/gradio_api/call/generate/' + submitData.event_id;
+    var data = await listenSSE(sseUrl, 600000);
+    if(!data || !data[0]){
+      throw new Error('生成結果為空');
+    }
+    return { url: buildImageUrl(data[0]), seed: data[2] || 0 };
+  }
+
+  function listenSSE(sseUrl, timeoutMs){
+    return new Promise(function(resolve, reject){
+      var resolved = false;
+      var ctrl = new AbortController();
+
+      function cleanup(err, data){
+        if(resolved) return;
+        resolved = true;
+        ctrl.abort();
+        if(err) reject(err);
+        else resolve(data);
+      }
+
+      fetch(sseUrl, {
+        headers: { 'Accept': 'text/event-stream' },
+        signal: ctrl.signal
+      }).then(function(resp){
+        if(!resp.ok){
+          cleanup(new Error('SSE 失敗 (' + resp.status + ')'));
+          return;
+        }
+
+        var reader = resp.body.getReader();
+        var decoder = new TextDecoder();
+        var buffer = '';
+        var evtType = '';
+        var evtData = '';
+
+        function loop(){
+          reader.read().then(function(result){
+            if(result.done){ cleanup(new Error('SSE 中斷')); return; }
+
+            buffer += decoder.decode(result.value, { stream: true });
+            var lines = buffer.split('\n');
+            buffer = lines.pop() || '';
+
+            for(var i = 0; i < lines.length; i++){
+              var line = lines[i];
+              if(line.indexOf('event: ') === 0){
+                evtType = line.slice(7).trim();
+              }else if(line.indexOf('data: ') === 0){
+                evtData = line.slice(6);
+              }else if(line === '' && evtData){
+                var parsed = null;
+                try{ parsed = JSON.parse(evtData); }catch(e){}
+
+                var isComplete = (evtType === 'complete' || evtType === 'process_completed');
+                var isError = (evtType === 'error' || evtType === 'process_error');
+                if(!isComplete && !isError && parsed && parsed.msg){
+                  isComplete = (parsed.msg === 'process_completed');
+                  isError = (parsed.msg === 'process_error');
+                }
+
+                // Also handle array-format complete (Nano returns array directly)
+                if(!isComplete && !isError && Array.isArray(parsed) && parsed.length > 0 && parsed[0] && (parsed[0].url || parsed[0].path)){
+                  isComplete = true;
+                }
+
+                if(isComplete){
+                  if(parsed && parsed.output && parsed.output.data){
+                    cleanup(null, parsed.output.data);
+                  }else if(Array.isArray(parsed)){
+                    cleanup(null, parsed);
+                  }else if(parsed && parsed.data){
+                    cleanup(null, parsed.data);
+                  }else{
+                    cleanup(new Error('輸出格式異常'));
+                  }
+                  return;
+                }
+
+                if(isError){
+                  var msg = '生成失敗';
+                  if(parsed){ msg = parsed.error || parsed.message || msg; }
+                  if(msg.indexOf('GPU') >= 0 || msg.indexOf('duration') >= 0){
+                    msg = 'GPU 資源不足，請改用 360p 解析度後重試';
+                  }
+                  cleanup(new Error(msg));
+                  return;
+                }
+
+                // Progress update
+                if(parsed && parsed.msg === 'process_generating'){
+                  showStatus('Cosmos3-Nano 生成中...', '');
+                }
+
+                evtType = '';
+                evtData = '';
+              }
+            }
+            if(!resolved) loop();
+          }).catch(function(err){
+            if(!resolved) cleanup(err);
+          });
+        }
+
+        loop();
+      }).catch(function(err){
+        if(!resolved) cleanup(err);
+      });
+
+      setTimeout(function(){
+        if(!resolved) cleanup(new Error('生成逾時 (10分鐘)，請改用 360p 解析度'));
+      }, timeoutMs);
+    });
+  }
+
+  // ===== UI Helpers =====
+
+  function setLoading(loading){
+    sendBtn.disabled = loading;
+    sendIcon.innerHTML = loading ? '<span class="spinner"></span>' : '\u2191';
+  }
+
+  function hideImage(){
+    resultImage.style.display = 'none';
+    placeholder.style.display = '';
+    placeholder.innerHTML = '<span class="icon">\uD83C\uDFA8</span>\u8F38\u5165\u63D0\u793A\u8A5E\u5F8C\u9EDE\u64CA\u9001\u51FA<BR>\u5373\u53EF\u751F\u6210\u5716\u7247';
+    imageActions.classList.remove('visible');
+  }
+
+  function showStatus(msg, cls){
+    statusEl.textContent = msg;
+    statusEl.className = 'status ' + (cls || '');
+  }
+
+  function showToast(msg){
+    var t = document.querySelector('.toast');
+    if(t) t.remove();
+    t = document.createElement('div');
+    t.className = 'toast';
+    t.textContent = msg;
+    document.body.appendChild(t);
+    setTimeout(function(){ t.remove(); }, 2500);
+  }
+
+  // ===== History =====
+
+  function saveToHistory(prompt){
+    try{
+      var h = JSON.parse(localStorage.getItem('cosmos3_hist') || '[]');
+      h = h.filter(function(p){ return p !== prompt; });
+      h.unshift(prompt);
+      if(h.length > 20) h = h.slice(0, 20);
+      localStorage.setItem('cosmos3_hist', JSON.stringify(h));
+    }catch(e){}
+  }
+
+  function loadHistory(){
+    try{
+      var h = JSON.parse(localStorage.getItem('cosmos3_hist') || '[]');
+      historyEl.innerHTML = '';
+      h.forEach(function(p){
+        var pill = document.createElement('span');
+        pill.className = 'pill';
+        pill.textContent = p;
+        pill.title = p;
+        pill.addEventListener('click', function(){
+          promptInput.value = p;
+          promptInput.style.height = 'auto';
+          promptInput.style.height = Math.min(promptInput.scrollHeight, 120) + 'px';
+          doGenerate();
+        });
+        historyEl.appendChild(pill);
+      });
+    }catch(e){}
+  }
+
+  promptInput.focus();
+})();
+</script>
+</body>
+</html>
