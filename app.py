@@ -96,25 +96,6 @@ st.markdown("""
     div.stColumns > div:has(> div.stButton > button) {
         padding: 0 !important;
     }
-    .chip-btn > button {
-        background: #141428 !important;
-        border: 1px solid #1e1e3a !important;
-        border-radius: 14px !important;
-        color: #a0a0bb !important;
-        font-size: 11px !important;
-        padding: 5px 10px !important;
-        white-space: nowrap !important;
-        width: auto !important;
-        height: auto !important;
-        position: static !important;
-        cursor: pointer;
-        transition: all 0.15s;
-    }
-    .chip-btn > button:active {
-        background: #6c5ce7 !important;
-        color: #fff !important;
-        border-color: #6c5ce7 !important;
-    }
     .history-btn > button {
         background: #141428 !important;
         border: 1px solid #1e1e3a !important;
@@ -191,13 +172,6 @@ st.markdown("""
 st.markdown("<h1 style='text-align:center'>Cosmos3 Text2Image</h1>", unsafe_allow_html=True)
 st.markdown("<p style='text-align:center;color:#a0a0bb;font-size:0.8rem;margin-top:-10px'>nvidia/Cosmos3-Nano (16B) · 免金鑰</p>", unsafe_allow_html=True)
 
-SUGGESTIONS = [
-    ("🚀 太空人", "Astronaut in a jungle, cold color palette, muted colors, detailed"),
-    ("🌸 日式庭園", "A serene Japanese garden with cherry blossoms, pond, wooden bridge"),
-    ("🌃 賽博朋克", "Cyberpunk city street at night, neon lights, rain, cinematic lighting"),
-    ("🐱 貓咪", "Cute fluffy cat sleeping on a cloud, dreamy soft pastel colors"),
-]
-
 if "history" not in st.session_state:
     st.session_state.history = []
 if "generated" not in st.session_state:
@@ -212,16 +186,6 @@ if "seed_used" not in st.session_state:
     st.session_state.seed_used = 0
 if "pending_prompt" not in st.session_state:
     st.session_state.pending_prompt = ""
-
-st.markdown("<div style='display:flex;gap:6px;flex-wrap:wrap;margin-bottom:12px'>", unsafe_allow_html=True)
-chip_cols = st.columns(4)
-for i, (label, sug_prompt) in enumerate(SUGGESTIONS):
-    with chip_cols[i]:
-        st.markdown('<div class="chip-btn">', unsafe_allow_html=True)
-        if st.button(label, key=f"sug_{i}", use_container_width=True):
-            st.session_state.pending_prompt = sug_prompt
-            st.rerun()
-        st.markdown("</div>", unsafe_allow_html=True)
 
 init_prompt = st.session_state.pending_prompt
 st.session_state.pending_prompt = ""
@@ -238,7 +202,6 @@ with st.container():
     send_col1, send_col2, send_col3 = st.columns([1, 1, 1])
     with send_col2:
         generate_clicked = st.button("↑", use_container_width=True)
-st.markdown("</div>", unsafe_allow_html=True)
 
 with st.expander("⚙ 進階設定"):
     resolution = st.selectbox(
