@@ -99,7 +99,7 @@ def generate_stablehorde(prompt_text):
     headers = {"apikey": STABLEHORDE_API_KEY, "Content-Type": "application/json"}
     payload = {
         "prompt": prompt_text,
-        "params": {"width": 768, "height": 768, "steps": 20},
+        "params": {"width": 512, "height": 512, "steps": 15},
         "nsfw": True,
         "censor_nsfw": False,
         "r2": True,
@@ -160,7 +160,7 @@ with c1:
 with st.expander("💡 連線說明", expanded=False):
     st.markdown("""
     **兩個繪圖引擎**
-    - **Stable Horde**（預設）：群眾分散式運算網路，完全免費免金鑰，排隊約 15~60 秒出圖。768x768。
+    - **Stable Horde**（預設）：群眾分散式運算網路，完全免費免金鑰，排隊約 15~60 秒出圖。512x512。
     - **Imagen 4**：Google 頂級模型，需在 Streamlit Secrets 中設定 `GOOGLE_API_KEY`。
     """)
 
