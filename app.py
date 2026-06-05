@@ -1,10 +1,9 @@
 import sys
+import io as _io
 
-try:
-    sys.stdout.reconfigure(encoding='utf-8', errors='replace')
-    sys.stderr.reconfigure(encoding='utf-8', errors='replace')
-except Exception:
-    pass
+if sys.platform == 'win32':
+    sys.stdout = _io.TextIOWrapper(sys.stdout.buffer, encoding='utf-8', errors='replace')
+    sys.stderr = _io.TextIOWrapper(sys.stderr.buffer, encoding='utf-8', errors='replace')
 
 import streamlit as st
 import requests
