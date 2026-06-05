@@ -18,6 +18,7 @@ import time
 import io
 import base64
 from datetime import datetime
+from PIL import Image
 
 st.set_page_config(
     page_title="Cosmos3 AI Studio",
@@ -290,16 +291,20 @@ if st.session_state.get("error"):
 if st.session_state.get("image_url"):
     st.markdown("---")
     img_url = st.session_state.image_url
+    st.caption(f"生成提示詞：{st.session_state.get('active_prompt', '')}")
     if img_url.startswith("data:image/"):
         b64_str = img_url.split(",", 1)[1]
         img_bytes = base64.b64decode(b64_str)
         ext = "webp" if "webp" in img_url else "png"
-        st.markdown(
-            f'<img src="{img_url}" style="max-width:100%;border-radius:12px;" '
-            f'onerror="this.onerror=null;this.src=\'data:image/png;base64,{b64_str}\';" />',
-            unsafe_allow_html=True,
-        )
-        st.caption(f"生成提示詞：{st.session_state.get('active_prompt', '')}")
+        try:
+            pil_img = Image.open(io.BytesIO(img_bytes))
+            st.image(pil_img, use_container_width=True)
+        except Exception as img_err:
+            st.warning(f"圖片解碼失敗：{img_err}")
+            st.markdown(
+                f'<img src="{img_url}" style="max-width:100%;border-radius:12px;" />',
+                unsafe_allow_html=True,
+            )
         st.download_button(
             label="💾 下載圖片",
             data=img_bytes,
@@ -308,7 +313,7 @@ if st.session_state.get("image_url"):
             use_container_width=True,
         )
     else:
-        st.image(img_url, caption=f"生成提示詞：{st.session_state.get('active_prompt', '')}", use_container_width=True)
+        st.image(img_url, use_container_width=True)
         st.markdown(f'<a href="{img_url}" target="_blank"><button style="width:100%;padding:8px;border-radius:10px;background:#2563eb;color:white;border:none;cursor:pointer;font-weight:600;">💾 在新分頁下載</button></a>', unsafe_allow_html=True)
 
 if st.session_state.history:
