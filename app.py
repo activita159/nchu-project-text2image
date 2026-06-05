@@ -29,6 +29,7 @@ if "history" not in st.session_state:
     st.session_state.history = []
 
 GOOGLE_API_KEY = st.secrets.get("GOOGLE_API_KEY", "")
+STABLEHORDE_API_KEY = st.secrets.get("STABLEHORDE_API_KEY", "0000000000")
 
 STYLE_PRESETS = [
     ("🌟 寫實攝影", ", realistic photography, highly detailed, 8k resolution, professional lighting"),
@@ -108,7 +109,7 @@ def generate_hf_sd(prompt_text):
 
 def generate_stablehorde(prompt_text):
     submit_url = "https://stablehorde.net/api/v2/generate/async"
-    headers = {"apikey": "0000000000", "Content-Type": "application/json"}
+    headers = {"apikey": STABLEHORDE_API_KEY, "Content-Type": "application/json"}
     payload = {
         "prompt": prompt_text,
         "params": {"width": 1024, "height": 1024, "steps": 30},
