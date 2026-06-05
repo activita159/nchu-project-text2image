@@ -108,6 +108,7 @@ def generate_hf_sd(prompt_text):
 
 def generate_stablehorde(prompt_text):
     submit_url = "https://stablehorde.net/api/v2/generate/async"
+    headers = {"apikey": "0000000000", "Content-Type": "application/json"}
     payload = {
         "prompt": prompt_text,
         "params": {"width": 1024, "height": 1024, "steps": 30},
@@ -116,7 +117,7 @@ def generate_stablehorde(prompt_text):
         "r2": True,
         "shared": True,
     }
-    submit_resp = requests.post(submit_url, json=payload, timeout=30)
+    submit_resp = requests.post(submit_url, json=payload, headers=headers, timeout=30)
     if not submit_resp.ok:
         error_detail = submit_resp.text[:300]
         raise Exception(f"Stable Horde 請求失敗 ({submit_resp.status_code}): {error_detail}")
@@ -129,6 +130,7 @@ def generate_stablehorde(prompt_text):
         try:
             check_resp = requests.get(
                 f"https://stablehorde.net/api/v2/generate/status/{task_id}",
+                headers=headers,
                 timeout=30,
             )
             if not check_resp.ok:
