@@ -39,6 +39,10 @@ STYLE_PRESETS = [
 ]
 
 
+def clean_prompt(raw: str) -> str:
+    return raw.strip().lstrip(",").strip()
+
+
 def fetch_with_backoff(url, method="POST", json_data=None, max_retries=5, headers=None):
     delay = 1
     for i in range(max_retries):
@@ -102,7 +106,13 @@ def generate_cosmos3(prompt_text):
 def generate_pollinations(prompt_text):
     import random
     seed = random.randint(0, 999999)
-    return f"https://image.pollinations.ai/prompt/{requests.utils.quote(prompt_text)}?nologo=true&width=1024&height=1024&seed={seed}"
+    poll_url = f"https://image.pollinations.ai/prompt/{requests.utils.quote(prompt_text)}?nologo=true&width=1024&height=1024&seed={seed}"
+    resp = fetch_with_backoff(poll_url, method="GET")
+    if not resp.ok:
+        raise Exception(f"Pollinations API 錯誤: {resp.status_code}")
+    img_bytes = resp.content
+    b64 = base64.b64encode(img_bytes).decode("utf-8")
+    return f"data:image/png;base64,{b64}"
 
 
 # --- UI ---
@@ -179,34 +189,36 @@ prompt = st.text_area(
 
 c1, c2, c3 = st.columns([2, 1, 2])
 with c2:
-    generate_btn = st.button("✨ 生成圖片", use_container_width=True, type="primary", disabled=not prompt.strip())
+    final_prompt = clean_prompt(prompt.strip()) if prompt.strip() else ""
+    generate_btn = st.button("✨ 生成圖片", use_container_width=True, type="primary", disabled=not final_prompt)
 
 st.caption("按 Enter 或點擊按鈕直接產生圖片 · 建議使用英文以獲得最佳繪圖效果")
 
-if generate_btn and prompt.strip():
+if generate_btn and final_prompt:
+    st.session_state.active_prompt = final_prompt
     with st.spinner("🚀 正在生成圖片..."):
         st.session_state.error = None
         st.session_state.image_url = None
         try:
             engine = st.session_state.engine
             if engine == "imagen4":
-                url = generate_imagen4(prompt)
+                url = generate_imagen4(final_prompt)
                 st.session_state.image_url = url
-                add_to_history(url, prompt, "Imagen 4")
+                add_to_history(url, final_prompt, "Imagen 4")
             elif engine == "cosmos3":
                 try:
-                    url = generate_cosmos3(prompt)
+                    url = generate_cosmos3(final_prompt)
                     st.session_state.image_url = url
-                    add_to_history(url, prompt, "Cosmos 3")
+                    add_to_history(url, final_prompt, "Cosmos 3")
                 except Exception as e:
                     st.warning(f"Cosmos3 失敗：{e}\n自動切換至公共節點...")
-                    url = generate_pollinations(prompt)
+                    url = generate_pollinations(final_prompt)
                     st.session_state.image_url = url
-                    add_to_history(url, prompt, "公共備用")
+                    add_to_history(url, final_prompt, "公共備用")
             else:
-                url = generate_pollinations(prompt)
+                url = generate_pollinations(final_prompt)
                 st.session_state.image_url = url
-                add_to_history(url, prompt, "Pollinations")
+                add_to_history(url, final_prompt, "Pollinations")
         except Exception as e:
             st.session_state.error = str(e)
 
@@ -215,7 +227,7 @@ if st.session_state.get("error"):
 
 if st.session_state.get("image_url"):
     st.markdown("---")
-    st.image(st.session_state.image_url, caption=f"生成提示詞：{prompt}", use_container_width=True)
+    st.image(st.session_state.image_url, caption=f"生成提示詞：{st.session_state.get('active_prompt', '')}", use_container_width=True)
 
     img_url = st.session_state.image_url
     if img_url.startswith("data:image/png;base64,"):
