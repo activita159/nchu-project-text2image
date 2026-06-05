@@ -46,9 +46,6 @@ if "history" not in st.session_state:
 GOOGLE_API_KEY = st.secrets.get("GOOGLE_API_KEY", "")
 STABLEHORDE_API_KEY = st.secrets.get("STABLEHORDE_API_KEY", "")
 
-if not STABLEHORDE_API_KEY or "你的-" in STABLEHORDE_API_KEY:
-    st.warning("⚠️ 尚未設定有效的 Stable Horde API Key，請至 [stablehorde.net](https://stablehorde.net/register) 註冊並在 Streamlit Cloud → Settings → Secrets 中設定 `STABLEHORDE_API_KEY`", icon="🔑")
-
 STYLE_PRESETS = [
     ("🌟 寫實攝影", ", realistic photography, highly detailed, 8k resolution, professional lighting"),
     ("🎨 概念插畫", ", digital illustration, fantasy concept art, vibrant colors, masterpiece"),
