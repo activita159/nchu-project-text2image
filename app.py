@@ -1,9 +1,17 @@
 import sys
 import io as _io
+import locale
+import os
+
+os.environ.setdefault('PYTHONIOENCODING', 'utf-8')
+locale.getpreferredencoding = lambda do_setlocale=True: 'utf-8'
 
 if sys.platform == 'win32':
-    sys.stdout = _io.TextIOWrapper(sys.stdout.buffer, encoding='utf-8', errors='replace')
-    sys.stderr = _io.TextIOWrapper(sys.stderr.buffer, encoding='utf-8', errors='replace')
+    try:
+        sys.stdout = _io.TextIOWrapper(sys.stdout.buffer, encoding='utf-8', errors='replace')
+        sys.stderr = _io.TextIOWrapper(sys.stderr.buffer, encoding='utf-8', errors='replace')
+    except Exception:
+        pass
 
 import streamlit as st
 import requests
