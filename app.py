@@ -93,26 +93,52 @@ def generate_imagen4(prompt_text):
     return f"data:image/png;base64,{b64}"
 
 
-def generate_cosmos3(prompt_text):
-    url = "https://api-inference.huggingface.co/models/nvidia/Cosmos3-Super-Text2Image"
+def generate_hf_sd(prompt_text):
+    url = "https://api-inference.huggingface.co/models/stabilityai/stable-diffusion-2-1"
     resp = fetch_with_backoff(url, json_data={"inputs": prompt_text})
     if not resp.ok:
-        raise Exception(f"HF 伺服器拒絕 (狀態: {resp.status_code})")
+        raise Exception(f"HF SD 伺服器拒絕 (狀態: {resp.status_code})")
     img_bytes = resp.content
     b64 = base64.b64encode(img_bytes).decode("utf-8")
     return f"data:image/png;base64,{b64}"
 
 
-def generate_pollinations(prompt_text):
-    import random
-    seed = random.randint(0, 999999)
-    poll_url = f"https://image.pollinations.ai/prompt/{requests.utils.quote(prompt_text)}?nologo=true&width=1024&height=1024&seed={seed}"
-    resp = fetch_with_backoff(poll_url, method="GET")
-    if not resp.ok:
-        raise Exception(f"Pollinations API 錯誤: {resp.status_code}")
-    img_bytes = resp.content
-    b64 = base64.b64encode(img_bytes).decode("utf-8")
-    return f"data:image/png;base64,{b64}"
+def generate_stablehorde(prompt_text):
+    submit_resp = requests.post(
+        "https://stablehorde.net/api/v2/generate/async",
+        json={"prompt": prompt_text},
+        timeout=30,
+    )
+    if not submit_resp.ok:
+        raise Exception(f"Stable Horde 請求失敗: {submit_resp.status_code}")
+    task_id = submit_resp.json().get("id")
+    if not task_id:
+        raise Exception("未取得 Stable Horde 任務 ID")
+
+    for attempt in range(36):
+        time.sleep(5)
+        try:
+            check_resp = requests.get(
+                f"https://stablehorde.net/api/v2/generate/status/{task_id}",
+                timeout=30,
+            )
+            if not check_resp.ok:
+                continue
+            status = check_resp.json()
+            if status.get("done"):
+                generations = status.get("generations", [])
+                if not generations:
+                    raise Exception("Stable Horde 回傳為空")
+                img_b64 = generations[0].get("img")
+                if not img_b64:
+                    raise Exception("Stable Horde 圖片資料為空")
+                return f"data:image/webp;base64,{img_b64}"
+            if status.get("faulted"):
+                raise Exception("Stable Horde 任務故障，請更換提示詞重試")
+        except requests.RequestException:
+            if attempt > 33:
+                raise
+    raise Exception("Stable Horde 排隊逾時（3分鐘），請稍後重試")
 
 
 # --- UI ---
@@ -133,11 +159,10 @@ with c1:
 
 with st.expander("💡 常見連線說明", expanded=False):
     st.markdown("""
-    **為什麼 Cosmos3 容易失敗？**  
-    Hugging Face 官方對於高算力模型限制了無 Key 請求。使用「Cosmos3」時，本 App 會極速嘗試，若被拒絕將**自動切換**為其他引擎，保證產圖不中斷。
-    
-    **哪一個最穩定？**  
-    推薦選擇「Imagen 4 頂級引擎」或「Pollinations 公共引擎」，完全不需要金鑰且保證成功（Pollinations 真正零金鑰）。
+    **三大免費繪圖引擎比較**
+    - **Imagen 4**：Google 頂級模型，畫質最優，需設定 Google API Key。
+    - **HF SD 2.1**：Hugging Face 託管的 Stable Diffusion，完全免費、匿名使用。
+    - **Stable Horde**：群眾分散式運算網路，免費免金鑰，排隊約 10~60 秒即出圖。
     """)
 
 st.markdown('<p style="font-size:10px;color:#94a3b8;font-weight:600;text-transform:uppercase;letter-spacing:1px;margin-top:12px;">選擇生成引擎</p>', unsafe_allow_html=True)
@@ -145,26 +170,26 @@ st.markdown('<p style="font-size:10px;color:#94a3b8;font-weight:600;text-transfo
 col1, col2, col3 = st.columns(3)
 
 with col1:
-    i4_selected = st.button("🔥 Imagen 4\n*穩定高畫質*", key="imagen4", use_container_width=True,
+    i4_selected = st.button("🔥 Imagen 4\n*頂級畫質*", key="imagen4", use_container_width=True,
                              help="需要設定 GOOGLE_API_KEY（Streamlit Secrets）")
 with col2:
-    c3_selected = st.button("🎨 Cosmos3\n*原廠模型*", key="cosmos3", use_container_width=True,
-                             help="Hugging Face 免 Key，但可能被 CORS/限流阻擋")
+    hf_selected = st.button("🎨 HF SD 2.1\n*免費快速*", key="hfsd", use_container_width=True,
+                             help="Hugging Face 免費 Stable Diffusion 2.1")
 with col3:
-    po_selected = st.button("⚡ 公共節點\n*極速不設限*", key="pollinations", use_container_width=True,
-                             help="Pollinations 公共引擎，100% 免 Key")
+    sh_selected = st.button("⚡ Stable Horde\n*免費高品質*", key="stablehorde", use_container_width=True,
+                             help="分散式運算網路，100% 免費免金鑰")
 
 if "engine" not in st.session_state:
-    st.session_state.engine = "pollinations"
+    st.session_state.engine = "stablehorde"
 
 if i4_selected:
     st.session_state.engine = "imagen4"
-if c3_selected:
-    st.session_state.engine = "cosmos3"
-if po_selected:
-    st.session_state.engine = "pollinations"
+if hf_selected:
+    st.session_state.engine = "hfsd"
+if sh_selected:
+    st.session_state.engine = "stablehorde"
 
-engine_labels = {"imagen4": "Imagen 4", "cosmos3": "Cosmos3", "pollinations": "公共節點"}
+engine_labels = {"imagen4": "Imagen 4", "hfsd": "HF Stable Diffusion 2.1", "stablehorde": "Stable Horde"}
 st.caption(f"目前引擎：**{engine_labels[st.session_state.engine]}**")
 
 st.markdown('<p style="font-size:10px;color:#94a3b8;font-weight:600;text-transform:uppercase;letter-spacing:1px;margin-top:16px;">風格快速渲染</p>', unsafe_allow_html=True)
@@ -205,20 +230,20 @@ if generate_btn and final_prompt:
                 url = generate_imagen4(final_prompt)
                 st.session_state.image_url = url
                 add_to_history(url, final_prompt, "Imagen 4")
-            elif engine == "cosmos3":
+            elif engine == "hfsd":
                 try:
-                    url = generate_cosmos3(final_prompt)
+                    url = generate_hf_sd(final_prompt)
                     st.session_state.image_url = url
-                    add_to_history(url, final_prompt, "Cosmos 3")
+                    add_to_history(url, final_prompt, "HF SD 2.1")
                 except Exception as e:
-                    st.warning(f"Cosmos3 失敗：{e}\n自動切換至公共節點...")
-                    url = generate_pollinations(final_prompt)
+                    st.warning(f"HF SD 失敗：{e}\n自動切換至 Stable Horde...")
+                    url = generate_stablehorde(final_prompt)
                     st.session_state.image_url = url
-                    add_to_history(url, final_prompt, "公共備用")
+                    add_to_history(url, final_prompt, "Stable Horde(備援)")
             else:
-                url = generate_pollinations(final_prompt)
+                url = generate_stablehorde(final_prompt)
                 st.session_state.image_url = url
-                add_to_history(url, final_prompt, "Pollinations")
+                add_to_history(url, final_prompt, "Stable Horde")
         except Exception as e:
             st.session_state.error = str(e)
 
@@ -230,14 +255,15 @@ if st.session_state.get("image_url"):
     st.image(st.session_state.image_url, caption=f"生成提示詞：{st.session_state.get('active_prompt', '')}", use_container_width=True)
 
     img_url = st.session_state.image_url
-    if img_url.startswith("data:image/png;base64,"):
-        b64_str = img_url.replace("data:image/png;base64,", "")
+    if img_url.startswith("data:image/"):
+        b64_str = img_url.split(",", 1)[1]
         img_bytes = base64.b64decode(b64_str)
+        ext = "webp" if "webp" in img_url else "png"
         st.download_button(
             label="💾 下載圖片",
             data=img_bytes,
-            file_name=f"ai-art-{int(time.time())}.png",
-            mime="image/png",
+            file_name=f"ai-art-{int(time.time())}.{ext}",
+            mime=f"image/{ext}",
             use_container_width=True,
         )
     else:
