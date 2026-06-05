@@ -289,12 +289,11 @@ if st.session_state.get("error"):
 
 if st.session_state.get("image_url"):
     st.markdown("---")
-    st.image(st.session_state.image_url, caption=f"生成提示詞：{st.session_state.get('active_prompt', '')}", use_container_width=True)
-
     img_url = st.session_state.image_url
     if img_url.startswith("data:image/"):
         b64_str = img_url.split(",", 1)[1]
         img_bytes = base64.b64decode(b64_str)
+        st.image(img_bytes, caption=f"生成提示詞：{st.session_state.get('active_prompt', '')}", use_container_width=True)
         ext = "webp" if "webp" in img_url else "png"
         st.download_button(
             label="💾 下載圖片",
@@ -304,6 +303,7 @@ if st.session_state.get("image_url"):
             use_container_width=True,
         )
     else:
+        st.image(img_url, caption=f"生成提示詞：{st.session_state.get('active_prompt', '')}", use_container_width=True)
         st.markdown(f'<a href="{img_url}" target="_blank"><button style="width:100%;padding:8px;border-radius:10px;background:#2563eb;color:white;border:none;cursor:pointer;font-weight:600;">💾 在新分頁下載</button></a>', unsafe_allow_html=True)
 
 if st.session_state.history:
