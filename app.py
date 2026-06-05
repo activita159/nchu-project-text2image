@@ -93,9 +93,22 @@ def add_to_history(url, prompt_text, engine_name):
 
 
 def generate_imagen4(prompt_text):
-    if not GOOGLE_API_KEY:
+    api_key = GOOGLE_API_KEY.strip() if GOOGLE_API_KEY else ""
+    if not api_key:
         raise Exception("未設定 GOOGLE_API_KEY，請於 Streamlit Secrets 中設定。")
-    url = f"https://generativelanguage.googleapis.com/v1beta/models/imagen-4.0-generate-001:predict?key={GOOGLE_API_KEY}"
+        
+    has_unicode = False
+    try:
+        api_key.encode('ascii')
+    except UnicodeEncodeError:
+        has_unicode = True
+        
+    is_placeholder = any(x in api_key for x in ["你的", "your-", "YOUR-"])
+    
+    if has_unicode or is_placeholder:
+        raise Exception("您的 GOOGLE_API_KEY 包含非英文字元（例如中文）或為預設預留字，請確認 Streamlit Secrets 設定是否正確。")
+
+    url = f"https://generativelanguage.googleapis.com/v1beta/models/imagen-4.0-generate-001:predict?key={api_key}"
     resp = fetch_with_backoff(url, json_data={
         "instances": {"prompt": prompt_text},
         "parameters": {"sampleCount": 1}
@@ -110,13 +123,24 @@ def generate_imagen4(prompt_text):
 
 
 def generate_stablehorde(prompt_text):
-    if not STABLEHORDE_API_KEY:
-        raise Exception(
-            "未設定 STABLEHORDE_API_KEY。請至 https://stablehorde.net/register 免費註冊取得 Key，"
-            "再於 Streamlit Cloud App Settings → Secrets 中設定。"
-        )
+    api_key = STABLEHORDE_API_KEY.strip() if STABLEHORDE_API_KEY else ""
+    
+    has_unicode = False
+    try:
+        if api_key:
+            api_key.encode('ascii')
+    except UnicodeEncodeError:
+        has_unicode = True
+        
+    is_placeholder = any(x in api_key for x in ["你的", "your-", "YOUR-"])
+    
+    if not api_key or has_unicode or is_placeholder:
+        if api_key and (has_unicode or is_placeholder):
+            st.warning("⚠️ 偵測到無效的 STABLEHORDE_API_KEY（包含中文或預設預留字），已自動切換為免金鑰模式 (0000000000)。")
+        api_key = "0000000000"
+
     submit_url = "https://stablehorde.net/api/v2/generate/async"
-    headers = {"apikey": STABLEHORDE_API_KEY, "Content-Type": "application/json"}
+    headers = {"apikey": api_key, "Content-Type": "application/json"}
     payload = {
         "prompt": prompt_text,
         "params": {"width": 512, "height": 512, "steps": 15},
