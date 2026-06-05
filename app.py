@@ -293,8 +293,13 @@ if st.session_state.get("image_url"):
     if img_url.startswith("data:image/"):
         b64_str = img_url.split(",", 1)[1]
         img_bytes = base64.b64decode(b64_str)
-        st.image(img_bytes, caption=f"生成提示詞：{st.session_state.get('active_prompt', '')}", use_container_width=True)
         ext = "webp" if "webp" in img_url else "png"
+        st.markdown(
+            f'<img src="{img_url}" style="max-width:100%;border-radius:12px;" '
+            f'onerror="this.onerror=null;this.src=\'data:image/png;base64,{b64_str}\';" />',
+            unsafe_allow_html=True,
+        )
+        st.caption(f"生成提示詞：{st.session_state.get('active_prompt', '')}")
         st.download_button(
             label="💾 下載圖片",
             data=img_bytes,
