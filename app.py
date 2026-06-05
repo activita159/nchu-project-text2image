@@ -102,7 +102,7 @@ def generate_stablehorde(prompt_text):
         "params": {"width": 512, "height": 512, "steps": 15},
         "nsfw": True,
         "censor_nsfw": False,
-        "r2": True,
+        "r2": False,
         "shared": True,
     }
     submit_resp = requests.post(submit_url, json=payload, headers=headers, timeout=30)
