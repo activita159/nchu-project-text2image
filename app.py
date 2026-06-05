@@ -261,22 +261,28 @@ st.caption("按 Enter 或點擊按鈕直接產生圖片 · 建議使用英文以
 
 if generate_btn and final_prompt:
     st.session_state.active_prompt = final_prompt
-    with st.spinner("🚀 正在生成圖片..."):
-        st.session_state.error = None
-        st.session_state.image_url = None
-        try:
-            engine = st.session_state.engine
+    st.session_state.error = None
+    st.session_state.image_url = None
+    try:
+        engine = st.session_state.engine
+        with st.status(f"🚀 使用 {engine_labels.get(engine, engine)} 生成中...", expanded=True) as status:
+            st.write(f"提示詞：{final_prompt}")
             if engine == "imagen4":
+                st.write("正在呼叫 Imagen 4 API...")
                 url = generate_imagen4(final_prompt)
                 st.session_state.image_url = url
                 add_to_history(url, final_prompt, "Imagen 4")
             else:
+                st.write("正在呼叫 Stable Horde API...")
                 url = generate_stablehorde(final_prompt)
                 st.session_state.image_url = url
                 add_to_history(url, final_prompt, "Stable Horde")
-        except Exception as e:
-            st.session_state.error = str(e)
-            print(f"[ERROR] {e}", flush=True)
+            status.update(label="✅ 生成完成！", state="complete")
+    except Exception as e:
+        st.session_state.error = str(e)
+        print(f"[ERROR] {e}", flush=True)
+        import traceback
+        st.exception(e)
 
 if st.session_state.get("error"):
     st.error(f"⚠️ {st.session_state.error}")
