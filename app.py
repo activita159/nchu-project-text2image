@@ -94,23 +94,32 @@ def generate_imagen4(prompt_text):
 
 
 def generate_hf_sd(prompt_text):
-    url = "https://api-inference.huggingface.co/models/stabilityai/stable-diffusion-2-1"
-    resp = fetch_with_backoff(url, json_data={"inputs": prompt_text})
-    if not resp.ok:
-        raise Exception(f"HF SD 伺服器拒絕 (狀態: {resp.status_code})")
-    img_bytes = resp.content
-    b64 = base64.b64encode(img_bytes).decode("utf-8")
-    return f"data:image/png;base64,{b64}"
+    url = "https://api-inference.huggingface.co/models/runwayml/stable-diffusion-v1-5"
+    try:
+        resp = fetch_with_backoff(url, json_data={"inputs": prompt_text}, max_retries=2)
+        if not resp.ok:
+            raise Exception(f"HF SD 伺服器拒絕 (狀態: {resp.status_code})")
+        img_bytes = resp.content
+        b64 = base64.b64encode(img_bytes).decode("utf-8")
+        return f"data:image/png;base64,{b64}"
+    except (requests.ConnectionError, requests.Timeout) as e:
+        raise Exception(f"HF SD 無法連線（Streamlit Cloud 網路限制）: {e}")
 
 
 def generate_stablehorde(prompt_text):
-    submit_resp = requests.post(
-        "https://stablehorde.net/api/v2/generate/async",
-        json={"prompt": prompt_text},
-        timeout=30,
-    )
+    submit_url = "https://stablehorde.net/api/v2/generate/async"
+    payload = {
+        "prompt": prompt_text,
+        "params": {"width": 1024, "height": 1024, "steps": 30},
+        "nsfw": True,
+        "censor_nsfw": False,
+        "r2": True,
+        "shared": True,
+    }
+    submit_resp = requests.post(submit_url, json=payload, timeout=30)
     if not submit_resp.ok:
-        raise Exception(f"Stable Horde 請求失敗: {submit_resp.status_code}")
+        error_detail = submit_resp.text[:300]
+        raise Exception(f"Stable Horde 請求失敗 ({submit_resp.status_code}): {error_detail}")
     task_id = submit_resp.json().get("id")
     if not task_id:
         raise Exception("未取得 Stable Horde 任務 ID")
@@ -134,7 +143,8 @@ def generate_stablehorde(prompt_text):
                     raise Exception("Stable Horde 圖片資料為空")
                 return f"data:image/webp;base64,{img_b64}"
             if status.get("faulted"):
-                raise Exception("Stable Horde 任務故障，請更換提示詞重試")
+                fault_msg = status.get("faulted", "未知錯誤")
+                raise Exception(f"Stable Horde 任務故障: {fault_msg}")
         except requests.RequestException:
             if attempt > 33:
                 raise
