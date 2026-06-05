@@ -94,25 +94,12 @@ def generate_imagen4(prompt_text):
     return f"data:image/png;base64,{b64}"
 
 
-def generate_hf_sd(prompt_text):
-    url = "https://api-inference.huggingface.co/models/runwayml/stable-diffusion-v1-5"
-    try:
-        resp = fetch_with_backoff(url, json_data={"inputs": prompt_text}, max_retries=2)
-        if not resp.ok:
-            raise Exception(f"HF SD 伺服器拒絕 (狀態: {resp.status_code})")
-        img_bytes = resp.content
-        b64 = base64.b64encode(img_bytes).decode("utf-8")
-        return f"data:image/png;base64,{b64}"
-    except (requests.ConnectionError, requests.Timeout) as e:
-        raise Exception(f"HF SD 無法連線（Streamlit Cloud 網路限制）: {e}")
-
-
 def generate_stablehorde(prompt_text):
     submit_url = "https://stablehorde.net/api/v2/generate/async"
     headers = {"apikey": STABLEHORDE_API_KEY, "Content-Type": "application/json"}
     payload = {
         "prompt": prompt_text,
-        "params": {"width": 1024, "height": 1024, "steps": 30},
+        "params": {"width": 768, "height": 768, "steps": 20},
         "nsfw": True,
         "censor_nsfw": False,
         "r2": True,
@@ -170,39 +157,33 @@ with c1:
     </div>
     """, unsafe_allow_html=True)
 
-with st.expander("💡 常見連線說明", expanded=False):
+with st.expander("💡 連線說明", expanded=False):
     st.markdown("""
-    **三大免費繪圖引擎比較**
-    - **Imagen 4**：Google 頂級模型，畫質最優，需設定 Google API Key。
-    - **HF SD 2.1**：Hugging Face 託管的 Stable Diffusion，完全免費、匿名使用。
-    - **Stable Horde**：群眾分散式運算網路，免費免金鑰，排隊約 10~60 秒即出圖。
+    **兩個繪圖引擎**
+    - **Stable Horde**（預設）：群眾分散式運算網路，完全免費免金鑰，排隊約 15~60 秒出圖。768x768。
+    - **Imagen 4**：Google 頂級模型，需在 Streamlit Secrets 中設定 `GOOGLE_API_KEY`。
     """)
 
 st.markdown('<p style="font-size:10px;color:#94a3b8;font-weight:600;text-transform:uppercase;letter-spacing:1px;margin-top:12px;">選擇生成引擎</p>', unsafe_allow_html=True)
 
-col1, col2, col3 = st.columns(3)
+col1, col2 = st.columns(2)
 
 with col1:
-    i4_selected = st.button("🔥 Imagen 4\n*頂級畫質*", key="imagen4", use_container_width=True,
-                             help="需要設定 GOOGLE_API_KEY（Streamlit Secrets）")
-with col2:
-    hf_selected = st.button("🎨 HF SD 2.1\n*免費快速*", key="hfsd", use_container_width=True,
-                             help="Hugging Face 免費 Stable Diffusion 2.1")
-with col3:
-    sh_selected = st.button("⚡ Stable Horde\n*免費高品質*", key="stablehorde", use_container_width=True,
+    sh_selected = st.button("⚡ Stable Horde\n*免費立即使用*", key="stablehorde", use_container_width=True,
                              help="分散式運算網路，100% 免費免金鑰")
+with col2:
+    i4_selected = st.button("🔥 Imagen 4\n*需 Google API Key*", key="imagen4", use_container_width=True,
+                             help="需要設定 GOOGLE_API_KEY（Streamlit Secrets）")
 
 if "engine" not in st.session_state:
     st.session_state.engine = "stablehorde"
 
-if i4_selected:
-    st.session_state.engine = "imagen4"
-if hf_selected:
-    st.session_state.engine = "hfsd"
 if sh_selected:
     st.session_state.engine = "stablehorde"
+if i4_selected:
+    st.session_state.engine = "imagen4"
 
-engine_labels = {"imagen4": "Imagen 4", "hfsd": "HF Stable Diffusion 2.1", "stablehorde": "Stable Horde"}
+engine_labels = {"stablehorde": "Stable Horde", "imagen4": "Imagen 4"}
 st.caption(f"目前引擎：**{engine_labels[st.session_state.engine]}**")
 
 st.markdown('<p style="font-size:10px;color:#94a3b8;font-weight:600;text-transform:uppercase;letter-spacing:1px;margin-top:16px;">風格快速渲染</p>', unsafe_allow_html=True)
@@ -243,16 +224,6 @@ if generate_btn and final_prompt:
                 url = generate_imagen4(final_prompt)
                 st.session_state.image_url = url
                 add_to_history(url, final_prompt, "Imagen 4")
-            elif engine == "hfsd":
-                try:
-                    url = generate_hf_sd(final_prompt)
-                    st.session_state.image_url = url
-                    add_to_history(url, final_prompt, "HF SD 2.1")
-                except Exception as e:
-                    st.warning(f"HF SD 失敗：{e}\n自動切換至 Stable Horde...")
-                    url = generate_stablehorde(final_prompt)
-                    st.session_state.image_url = url
-                    add_to_history(url, final_prompt, "Stable Horde(備援)")
             else:
                 url = generate_stablehorde(final_prompt)
                 st.session_state.image_url = url
