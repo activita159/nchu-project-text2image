@@ -51,11 +51,13 @@ GOOGLE_API_KEY = st.secrets.get("GOOGLE_API_KEY", "")
 
 # ── Pollinations 可選模型 ──────────────────────────────────────────────────────
 POLLINATIONS_MODELS = [
-    ("flux",          "FLUX（預設）",      "最新擴散模型，品質高"),
-    ("flux-realism",  "FLUX Realism",      "寫實風格加強版"),
-    ("flux-anime",    "FLUX Anime",        "動漫風格"),
-    ("flux-3d",       "FLUX 3D",           "3D 渲染風格"),
-    ("turbo",         "Turbo",             "速度最快，品質略低"),
+    ("flux",           "FLUX Schnell",     "快速高品質，無需付費"),
+    ("zimage",         "Z-Image Turbo",    "阿里巴巴 S3-DiT，品質佳"),
+    ("kontext",        "FLUX Kontext",     "支援圖片編輯"),
+    ("klein",          "FLUX Klein 4B",    "快速生成與編輯"),
+    ("gptimage",       "GPT Image 1 Mini", "OpenAI 快速生成"),
+    ("gptimage-large", "GPT Image 1.5",    "OpenAI 高品質生成"),
+    ("nova-canvas",    "Nova Canvas",      "Amazon 圖片生成"),
 ]
 POLL_MODEL_IDS   = [m[0] for m in POLLINATIONS_MODELS]
 POLL_MODEL_NAMES = [f"{m[1]}  —  {m[2]}" for m in POLLINATIONS_MODELS]
@@ -141,19 +143,22 @@ def generate_imagen4(prompt_text):
     return f"data:image/png;base64,{b64}"
 
 
-# ── Pollinations.ai（免費、無需 Key）─────────────────────────────────────────
-def generate_pollinations(prompt_text, model_id: str):
+# ── Pollinations.ai（建議申請免費 API Key）──────────────────────────────────
+def generate_pollinations(prompt_text, model_id: str, api_key: str = ""):
     """
-    呼叫 Pollinations.ai 免費圖片生成 API。
-    GET https://image.pollinations.ai/prompt/{encoded_prompt}?model=...&width=512&height=512&nologo=true&seed=...
-    直接回傳 JPEG 圖片二進位。
+    呼叫 Pollinations.ai 圖片生成 API。
+    GET https://gen.pollinations.ai/image/{encoded_prompt}?model=...&width=512&height=512&seed=...&key=...
+    直接回傳 JPEG/PNG 圖片二進位。
+    建議到 https://enter.pollinations.ai 申請免費 API Key（pk_ 開頭）。
     """
     seed = random.randint(1, 999999)
     encoded = urllib.parse.quote(prompt_text)
     url = (
-        f"https://image.pollinations.ai/prompt/{encoded}"
-        f"?model={model_id}&width=512&height=512&nologo=true&seed={seed}"
+        f"https://gen.pollinations.ai/image/{encoded}"
+        f"?model={model_id}&width=512&height=512&seed={seed}"
     )
+    if api_key.strip():
+        url += f"&key={api_key.strip()}"
 
     progress = st.empty()
     progress.info("⚙️ 正在呼叫 Pollinations.ai，請稍候（通常 10–30 秒）...")
@@ -167,6 +172,20 @@ def generate_pollinations(prompt_text, model_id: str):
         progress.empty()
         raise Exception(f"網路連線錯誤：{e}")
 
+    if resp.status_code == 401:
+        progress.empty()
+        raise Exception(
+            "Pollinations.ai 需要 API Key（401）。\n"
+            "請到 https://enter.pollinations.ai 免費申請一組 pk_ 開頭的 Key，"
+            "並貼到上方 Pollinations API Key 欄位中。"
+        )
+    if resp.status_code == 402:
+        progress.empty()
+        raise Exception(
+            "Pollinations.ai 額度不足（402）。\n"
+            "免費額度為每小時每 IP 1 Pollen，可能已用盡。"
+            "請稍後重試，或到 https://enter.pollinations.ai 查看餘額。"
+        )
     if not resp.ok:
         progress.empty()
         raise Exception(f"Pollinations.ai 回傳錯誤 ({resp.status_code})，請重試。")
@@ -177,8 +196,10 @@ def generate_pollinations(prompt_text, model_id: str):
         raise Exception("回傳資料過小，可能不是有效圖片，請重試。")
 
     progress.empty()
+    content_type = resp.headers.get("content-type", "image/jpeg")
+    ext = "png" if "png" in content_type else "jpeg"
     b64 = base64.b64encode(img_bytes).decode()
-    return f"data:image/jpeg;base64,{b64}"
+    return f"data:image/{ext};base64,{b64}"
 
 
 # ── Hugging Face Inference API（需使用者自行填入 Token）──────────────────────
@@ -282,7 +303,7 @@ with c1:
 with st.expander("💡 連線說明", expanded=False):
     st.markdown("""
     **三個繪圖引擎**
-    - **🆓 Pollinations.ai**（預設）：完全免費、無需任何 API Key，使用 FLUX 等模型，直接可用。
+    - **🆓 Pollinations.ai**（預設）：建議到 [enter.pollinations.ai](https://enter.pollinations.ai) 免費申請 API Key，每小時有限量免費額度。
     - **🤗 Hugging Face**：需填入自己的 HF Token（免費申請），但 Streamlit Cloud 環境可能受網路限制。
     - **🔥 Imagen 4**：Google 頂級模型，需在 Streamlit Secrets 中設定 `GOOGLE_API_KEY`。
     """)
@@ -292,8 +313,8 @@ st.markdown('<p style="font-size:10px;color:#94a3b8;font-weight:600;text-transfo
 
 col1, col2, col3 = st.columns(3)
 with col1:
-    poll_selected = st.button("🆓 Pollinations.ai\n*免費無需 Key*", key="poll_engine", use_container_width=True,
-                              help="完全免費，支援 FLUX / Turbo 等多種模型，無需任何帳號")
+    poll_selected = st.button("🆓 Pollinations.ai\n*建議申請 Key*", key="poll_engine", use_container_width=True,
+                              help="建議申請免費 API Key，每小時有限量免費額度")
 with col2:
     hf_selected = st.button("🤗 Hugging Face\n*需填入 Token*", key="hf_engine", use_container_width=True,
                              help="需填入自己的 HF Token，Streamlit Cloud 可能受網路限制")
@@ -324,9 +345,17 @@ if st.session_state.engine == "pollinations":
     )
     selected_poll_idx = POLL_MODEL_NAMES.index(selected_poll_name)
     selected_poll_id  = POLL_MODEL_IDS[selected_poll_idx]
-    st.caption(f"📌 使用模型：`{selected_poll_id}`　免費 · 無需帳號")
+    poll_api_key = st.text_input(
+        "Pollinations API Key（選填，建議申請）",
+        key="poll_api_key",
+        placeholder="pk_xxxxxxxxxxxxxxxxxxxx",
+        type="password",
+        help="到 https://enter.pollinations.ai 免費申請，不填亦可嘗試（有限流）",
+    )
+    st.caption(f"📌 使用模型：`{selected_poll_id}`　免費額度有限，建議申請 Key")
 else:
     selected_poll_id = POLL_MODEL_IDS[0]
+    poll_api_key = ""
 
 # ── Hugging Face 設定 ─────────────────────────────────────────────────────────
 if st.session_state.engine == "huggingface":
@@ -412,7 +441,7 @@ if generate_btn and final_prompt:
                 add_to_history(url, final_prompt, f"HF/{HF_MODELS[selected_hf_idx][1]}")
             else:  # pollinations
                 st.write(f"正在呼叫 Pollinations.ai（{selected_poll_id}）...")
-                url = generate_pollinations(final_prompt, selected_poll_id)
+                url = generate_pollinations(final_prompt, selected_poll_id, poll_api_key)
                 st.session_state.image_url = url
                 add_to_history(url, final_prompt, f"Pollinations/{POLLINATIONS_MODELS[selected_poll_idx][1]}")
             status.update(label="✅ 生成完成！", state="complete")
