@@ -32,11 +32,13 @@ st.markdown("""
     .stApp { background-color: #0f172a; }
     .stTextArea textarea { background-color: #1e293b !important; color: #e2e8f0 !important; border-color: #334155 !important; font-size: 14px !important; }
     .stTextArea textarea::placeholder { color: #64748b !important; }
+    .stTextInput input { background-color: #1e293b !important; color: #e2e8f0 !important; border-color: #334155 !important; }
+    .stTextInput input::placeholder { color: #64748b !important; }
     .stButton > button { border-radius: 12px !important; font-weight: 600 !important; }
-    .engine-btn { border-radius: 14px !important; padding: 14px 8px !important; }
     .preset-btn > button { border-radius: 20px !important; font-size: 11px !important; padding: 6px 14px !important; background-color: #1e293b !important; border: 1px solid #334155 !important; color: #cbd5e1 !important; }
     section[data-testid="stSidebar"] { background-color: #0f172a; }
     div[data-testid="stMarkdownContainer"] { color: #e2e8f0; }
+    .hf-token-box { background: linear-gradient(135deg, #1e293b, #0f2040); border: 1px solid #334155; border-radius: 12px; padding: 16px; margin: 12px 0; }
 </style>
 """, unsafe_allow_html=True)
 
@@ -44,7 +46,16 @@ if "history" not in st.session_state:
     st.session_state.history = []
 
 GOOGLE_API_KEY = st.secrets.get("GOOGLE_API_KEY", "")
-STABLEHORDE_API_KEY = st.secrets.get("STABLEHORDE_API_KEY", "")
+
+# HF 可選模型清單 (model_id, 顯示名稱, 描述)
+HF_MODELS = [
+    ("black-forest-labs/FLUX.1-schnell",   "FLUX.1-schnell",   "最快速，通常 10–20s"),
+    ("black-forest-labs/FLUX.1-dev",       "FLUX.1-dev",       "高品質，需較長等待"),
+    ("stabilityai/stable-diffusion-xl-base-1.0", "SDXL 1.0",  "經典穩定擴散 XL"),
+    ("runwayml/stable-diffusion-v1-5",     "SD 1.5",           "輕量快速，廣泛支援"),
+]
+HF_MODEL_IDS   = [m[0] for m in HF_MODELS]
+HF_MODEL_NAMES = [f"{m[1]}  —  {m[2]}" for m in HF_MODELS]
 
 STYLE_PRESETS = [
     ("🌟 寫實攝影", ", realistic photography, highly detailed, 8k resolution, professional lighting"),
@@ -92,21 +103,21 @@ def add_to_history(url, prompt_text, engine_name):
     st.session_state.history = st.session_state.history[:10]
 
 
+# ── Imagen 4 ──────────────────────────────────────────────────────────────────
 def generate_imagen4(prompt_text):
     api_key = GOOGLE_API_KEY.strip() if GOOGLE_API_KEY else ""
     if not api_key:
         raise Exception("未設定 GOOGLE_API_KEY，請於 Streamlit Secrets 中設定。")
-        
+
     has_unicode = False
     try:
         api_key.encode('ascii')
     except UnicodeEncodeError:
         has_unicode = True
-        
+
     is_placeholder = any(x in api_key for x in ["你的", "your-", "YOUR-"])
-    
     if has_unicode or is_placeholder:
-        raise Exception("您的 GOOGLE_API_KEY 包含非英文字元（例如中文）或為預設預留字，請確認 Streamlit Secrets 設定是否正確。")
+        raise Exception("您的 GOOGLE_API_KEY 包含非英文字元或為預設預留字，請確認設定是否正確。")
 
     url = f"https://generativelanguage.googleapis.com/v1beta/models/imagen-4.0-generate-001:predict?key={api_key}"
     resp = fetch_with_backoff(url, json_data={
@@ -122,84 +133,93 @@ def generate_imagen4(prompt_text):
     return f"data:image/png;base64,{b64}"
 
 
-def generate_stablehorde(prompt_text):
-    api_key = STABLEHORDE_API_KEY.strip() if STABLEHORDE_API_KEY else ""
-    
-    has_unicode = False
-    try:
-        if api_key:
-            api_key.encode('ascii')
-    except UnicodeEncodeError:
-        has_unicode = True
-        
-    is_placeholder = any(x in api_key for x in ["你的", "your-", "YOUR-"])
-    
-    if not api_key or has_unicode or is_placeholder:
-        if api_key and (has_unicode or is_placeholder):
-            st.warning("⚠️ 偵測到無效的 STABLEHORDE_API_KEY（包含中文或預設預留字），已自動切換為免金鑰模式 (0000000000)。")
-        api_key = "0000000000"
+# ── Hugging Face Inference API ─────────────────────────────────────────────────
+def generate_huggingface(prompt_text, hf_token: str, model_id: str):
+    """
+    呼叫 Hugging Face Inference API 生成圖片。
+    回傳 bytes（JPEG/PNG/WebP 等原始圖片資料）。
+    """
+    token = hf_token.strip() if hf_token else ""
+    if not token:
+        raise Exception(
+            "請在上方欄位填入您的 Hugging Face API Token。\n"
+            "尚無 Token？前往 https://huggingface.co/settings/tokens 免費申請（Read 權限即可）。"
+        )
+    if not token.startswith("hf_"):
+        raise Exception("Token 格式錯誤，Hugging Face Token 應以 hf_ 開頭，請重新確認。")
 
-    submit_url = "https://stablehorde.net/api/v2/generate/async"
-    headers = {"apikey": api_key, "Content-Type": "application/json"}
-    payload = {
-        "prompt": prompt_text,
-        "params": {"width": 512, "height": 512, "steps": 8},
-        "nsfw": True,
-        "censor_nsfw": False,
-        "r2": False,
-        "shared": True,
+    api_url = f"https://api-inference.huggingface.co/models/{model_id}"
+    headers = {
+        "Authorization": f"Bearer {token}",
+        "Content-Type": "application/json",
+        "Accept": "image/jpeg",
     }
-    submit_resp = requests.post(submit_url, json=payload, headers=headers, timeout=30)
-    if not submit_resp.ok:
-        error_detail = submit_resp.text[:300]
-        raise Exception(f"Stable Horde 請求失敗 ({submit_resp.status_code}): {error_detail}")
-    task_id = submit_resp.json().get("id")
-    if not task_id:
-        raise Exception("未取得 Stable Horde 任務 ID")
+    payload = {"inputs": prompt_text}
 
-    progress_placeholder = st.empty()
-    MAX_ATTEMPTS = 72  # 72 × 5s = 6 minutes
-    for attempt in range(MAX_ATTEMPTS):
-        time.sleep(5)
+    progress = st.empty()
+    max_retries = 6  # 最多重試 6 次（模型可能在冷啟動）
+    for attempt in range(max_retries):
+        progress.info(f"⚙️ 呼叫 Hugging Face API... (第 {attempt + 1}/{max_retries} 次嘗試)")
         try:
-            check_resp = requests.get(
-                f"https://stablehorde.net/api/v2/generate/status/{task_id}",
-                headers=headers,
-                timeout=30,
-            )
-            if not check_resp.ok:
-                progress_placeholder.info(f"⏳ 等待中... ({attempt + 1}/{MAX_ATTEMPTS}) — 伺服器回應異常，重試中")
+            resp = requests.post(api_url, headers=headers, json=payload, timeout=120)
+        except requests.Timeout:
+            if attempt < max_retries - 1:
+                progress.warning(f"⏳ 請求逾時，等待後重試... ({attempt + 1}/{max_retries})")
+                time.sleep(10)
                 continue
-            status = check_resp.json()
-            queue_pos = status.get("queue_position", 0)
-            wait_time = status.get("wait_time", 0)
-            eta_str = f"預估剩餘 {wait_time}s" if wait_time else ""
-            if queue_pos:
-                progress_placeholder.info(f"⏳ 排隊中... 第 {queue_pos} 位 {eta_str}（第 {attempt + 1} 次輪詢）")
-            else:
-                progress_placeholder.info(f"⚙️ 生成中... {eta_str}（第 {attempt + 1} 次輪詢）")
-            if status.get("done"):
-                progress_placeholder.empty()
-                generations = status.get("generations", [])
-                if not generations:
-                    raise Exception("Stable Horde 回傳為空")
-                img_b64 = generations[0].get("img")
-                if not img_b64:
-                    raise Exception("Stable Horde 圖片資料為空")
-                return f"data:image/webp;base64,{img_b64}"
-            if status.get("faulted"):
-                progress_placeholder.empty()
-                fault_msg = status.get("faulted", "未知錯誤")
-                raise Exception(f"Stable Horde 任務故障: {fault_msg}")
-        except requests.RequestException:
-            if attempt > MAX_ATTEMPTS - 4:
-                raise
-            progress_placeholder.warning(f"⚠️ 網路逾時，重試中... ({attempt + 1}/{MAX_ATTEMPTS})")
-    progress_placeholder.empty()
-    raise Exception("Stable Horde 排隊逾時（6分鐘），請稍後重試或改用 Imagen 4 引擎")
+            progress.empty()
+            raise Exception("Hugging Face API 請求逾時（2分鐘），請稍後重試。")
+        except requests.RequestException as e:
+            progress.empty()
+            raise Exception(f"網路連線錯誤：{e}")
+
+        if resp.status_code == 503:
+            # 模型載入中（冷啟動），等待後重試
+            try:
+                info = resp.json()
+                estimated = info.get("estimated_time", 20)
+            except Exception:
+                estimated = 20
+            wait = min(int(estimated) + 5, 30)
+            progress.info(f"🔄 模型載入中，預計 {estimated:.0f}s，等待 {wait}s 後重試... ({attempt + 1}/{max_retries})")
+            time.sleep(wait)
+            continue
+
+        if resp.status_code == 401:
+            progress.empty()
+            raise Exception("Token 驗證失敗（401），請確認 Hugging Face Token 正確且具備 Read 權限。")
+        if resp.status_code == 403:
+            progress.empty()
+            raise Exception(f"存取被拒（403），此模型可能需要先至 HuggingFace 網站同意使用條款：https://huggingface.co/{model_id}")
+        if resp.status_code == 429:
+            progress.warning(f"⚠️ 請求頻率過高（429），等待 15s 後重試... ({attempt + 1}/{max_retries})")
+            time.sleep(15)
+            continue
+        if not resp.ok:
+            try:
+                err_detail = resp.json().get("error", resp.text[:300])
+            except Exception:
+                err_detail = resp.text[:300]
+            progress.empty()
+            raise Exception(f"Hugging Face API 錯誤 ({resp.status_code}): {err_detail}")
+
+        # 成功：response body 就是圖片二進位資料
+        content_type = resp.headers.get("content-type", "image/jpeg")
+        img_bytes = resp.content
+        if len(img_bytes) < 100:
+            progress.empty()
+            raise Exception("回傳資料過小，可能不是有效圖片，請重試。")
+
+        progress.empty()
+        ext = "png" if "png" in content_type else ("webp" if "webp" in content_type else "jpeg")
+        b64 = base64.b64encode(img_bytes).decode()
+        return f"data:image/{ext};base64,{b64}"
+
+    progress.empty()
+    raise Exception("Hugging Face 模型多次嘗試後仍未回應，請稍後重試。")
 
 
-# --- UI ---
+# ── UI ────────────────────────────────────────────────────────────────────────
 
 _, c1, _ = st.columns([1, 3, 1])
 with c1:
@@ -218,32 +238,67 @@ with c1:
 with st.expander("💡 連線說明", expanded=False):
     st.markdown("""
     **兩個繪圖引擎**
-    - **Stable Horde**（預設）：群眾分散式運算網路。需免費註冊 API Key：https://stablehorde.net/register，設在 Secrets 的 `STABLEHORDE_API_KEY`。
+    - **Hugging Face**（預設）：使用 HF Inference API，支援 FLUX.1-schnell、SDXL 等模型。需在下方填入您的 HF Token（免費）：https://huggingface.co/settings/tokens
     - **Imagen 4**：Google 頂級模型，需在 Streamlit Secrets 中設定 `GOOGLE_API_KEY`。
     """)
 
+# ── 引擎選擇 ──────────────────────────────────────────────────────────────────
 st.markdown('<p style="font-size:10px;color:#94a3b8;font-weight:600;text-transform:uppercase;letter-spacing:1px;margin-top:12px;">選擇生成引擎</p>', unsafe_allow_html=True)
 
 col1, col2 = st.columns(2)
-
 with col1:
-    sh_selected = st.button("⚡ Stable Horde\n*免費立即使用*", key="stablehorde", use_container_width=True,
-                             help="分散式運算網路，100% 免費免金鑰")
+    hf_selected = st.button("🤗 Hugging Face\n*填入 Token 即可用*", key="hf_engine", use_container_width=True,
+                             help="支援 FLUX.1-schnell / SDXL 等，免費 Token 即可使用")
 with col2:
     i4_selected = st.button("🔥 Imagen 4\n*需 Google API Key*", key="imagen4", use_container_width=True,
                              help="需要設定 GOOGLE_API_KEY（Streamlit Secrets）")
 
 if "engine" not in st.session_state:
-    st.session_state.engine = "stablehorde"
+    st.session_state.engine = "huggingface"
 
-if sh_selected:
-    st.session_state.engine = "stablehorde"
+if hf_selected:
+    st.session_state.engine = "huggingface"
 if i4_selected:
     st.session_state.engine = "imagen4"
 
-engine_labels = {"stablehorde": "Stable Horde", "imagen4": "Imagen 4"}
+engine_labels = {"huggingface": "Hugging Face", "imagen4": "Imagen 4"}
 st.caption(f"目前引擎：**{engine_labels[st.session_state.engine]}**")
 
+# ── Hugging Face 設定區塊 ─────────────────────────────────────────────────────
+if st.session_state.engine == "huggingface":
+    st.markdown("""
+    <div class="hf-token-box">
+        <p style="margin:0 0 4px 0;font-size:11px;color:#94a3b8;font-weight:600;text-transform:uppercase;letter-spacing:1px;">
+            🤗 Hugging Face 設定
+        </p>
+    </div>
+    """, unsafe_allow_html=True)
+
+    hf_col1, hf_col2 = st.columns([3, 2])
+    with hf_col1:
+        hf_token_input = st.text_input(
+            "HF API Token",
+            key="hf_token",
+            placeholder="hf_xxxxxxxxxxxxxxxxxxxx",
+            type="password",
+            help="前往 https://huggingface.co/settings/tokens 申請免費 Token（Read 權限即可）",
+            label_visibility="collapsed",
+        )
+    with hf_col2:
+        selected_model_name = st.selectbox(
+            "模型",
+            options=HF_MODEL_NAMES,
+            key="hf_model_name",
+            label_visibility="collapsed",
+        )
+    selected_model_idx = HF_MODEL_NAMES.index(selected_model_name)
+    selected_model_id  = HF_MODEL_IDS[selected_model_idx]
+    st.caption(f"📌 模型 ID：`{selected_model_id}`　　[在 HuggingFace 查看](https://huggingface.co/{selected_model_id})")
+else:
+    hf_token_input = ""
+    selected_model_id = HF_MODEL_IDS[0]
+
+# ── 風格快速渲染 ───────────────────────────────────────────────────────────────
 st.markdown('<p style="font-size:10px;color:#94a3b8;font-weight:600;text-transform:uppercase;letter-spacing:1px;margin-top:16px;">風格快速渲染</p>', unsafe_allow_html=True)
 
 preset_cols = st.columns(len(STYLE_PRESETS))
@@ -269,8 +324,9 @@ with c2:
     final_prompt = clean_prompt(prompt.strip()) if prompt.strip() else ""
     generate_btn = st.button("✨ 生成圖片", use_container_width=True, type="primary", disabled=not final_prompt)
 
-st.caption("按 Enter 或點擊按鈕直接產生圖片 · 建議使用英文以獲得最佳繪圖效果")
+st.caption("點擊按鈕產生圖片 · 建議使用英文以獲得最佳繪圖效果")
 
+# ── 生成邏輯 ──────────────────────────────────────────────────────────────────
 if generate_btn and final_prompt:
     st.session_state.active_prompt = final_prompt
     st.session_state.error = None
@@ -285,10 +341,10 @@ if generate_btn and final_prompt:
                 st.session_state.image_url = url
                 add_to_history(url, final_prompt, "Imagen 4")
             else:
-                st.write("正在呼叫 Stable Horde API...")
-                url = generate_stablehorde(final_prompt)
+                st.write(f"正在呼叫 Hugging Face API（{selected_model_id}）...")
+                url = generate_huggingface(final_prompt, hf_token_input, selected_model_id)
                 st.session_state.image_url = url
-                add_to_history(url, final_prompt, "Stable Horde")
+                add_to_history(url, final_prompt, f"HF/{HF_MODELS[selected_model_idx][1]}")
             status.update(label="✅ 生成完成！", state="complete")
     except Exception as e:
         st.session_state.error = str(e)
@@ -299,6 +355,7 @@ if generate_btn and final_prompt:
 if st.session_state.get("error"):
     st.error(f"⚠️ {st.session_state.error}")
 
+# ── 圖片顯示 ──────────────────────────────────────────────────────────────────
 if st.session_state.get("image_url"):
     st.markdown("---")
     img_url = st.session_state.image_url
@@ -306,7 +363,7 @@ if st.session_state.get("image_url"):
     if img_url.startswith("data:image/"):
         b64_str = img_url.split(",", 1)[1]
         img_bytes = base64.b64decode(b64_str)
-        ext = "webp" if "webp" in img_url else "png"
+        ext = "webp" if "webp" in img_url else ("png" if "png" in img_url else "jpeg")
         try:
             pil_img = Image.open(io.BytesIO(img_bytes))
             st.image(pil_img, use_container_width=True)
@@ -327,6 +384,7 @@ if st.session_state.get("image_url"):
         st.image(img_url, use_container_width=True)
         st.markdown(f'<a href="{img_url}" target="_blank"><button style="width:100%;padding:8px;border-radius:10px;background:#2563eb;color:white;border:none;cursor:pointer;font-weight:600;">💾 在新分頁下載</button></a>', unsafe_allow_html=True)
 
+# ── 歷史記錄 ──────────────────────────────────────────────────────────────────
 if st.session_state.history:
     st.markdown("---")
     st.markdown('<p style="font-size:10px;color:#94a3b8;font-weight:600;text-transform:uppercase;letter-spacing:1px;">🕐 最近繪製記錄</p>', unsafe_allow_html=True)
