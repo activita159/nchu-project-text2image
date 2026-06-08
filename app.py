@@ -143,7 +143,7 @@ def generate_stablehorde(prompt_text):
     headers = {"apikey": api_key, "Content-Type": "application/json"}
     payload = {
         "prompt": prompt_text,
-        "params": {"width": 512, "height": 512, "steps": 15},
+        "params": {"width": 512, "height": 512, "steps": 8},
         "nsfw": True,
         "censor_nsfw": False,
         "r2": False,
@@ -157,7 +157,9 @@ def generate_stablehorde(prompt_text):
     if not task_id:
         raise Exception("未取得 Stable Horde 任務 ID")
 
-    for attempt in range(36):
+    progress_placeholder = st.empty()
+    MAX_ATTEMPTS = 72  # 72 × 5s = 6 minutes
+    for attempt in range(MAX_ATTEMPTS):
         time.sleep(5)
         try:
             check_resp = requests.get(
@@ -166,9 +168,18 @@ def generate_stablehorde(prompt_text):
                 timeout=30,
             )
             if not check_resp.ok:
+                progress_placeholder.info(f"⏳ 等待中... ({attempt + 1}/{MAX_ATTEMPTS}) — 伺服器回應異常，重試中")
                 continue
             status = check_resp.json()
+            queue_pos = status.get("queue_position", 0)
+            wait_time = status.get("wait_time", 0)
+            eta_str = f"預估剩餘 {wait_time}s" if wait_time else ""
+            if queue_pos:
+                progress_placeholder.info(f"⏳ 排隊中... 第 {queue_pos} 位 {eta_str}（第 {attempt + 1} 次輪詢）")
+            else:
+                progress_placeholder.info(f"⚙️ 生成中... {eta_str}（第 {attempt + 1} 次輪詢）")
             if status.get("done"):
+                progress_placeholder.empty()
                 generations = status.get("generations", [])
                 if not generations:
                     raise Exception("Stable Horde 回傳為空")
@@ -177,12 +188,15 @@ def generate_stablehorde(prompt_text):
                     raise Exception("Stable Horde 圖片資料為空")
                 return f"data:image/webp;base64,{img_b64}"
             if status.get("faulted"):
+                progress_placeholder.empty()
                 fault_msg = status.get("faulted", "未知錯誤")
                 raise Exception(f"Stable Horde 任務故障: {fault_msg}")
         except requests.RequestException:
-            if attempt > 33:
+            if attempt > MAX_ATTEMPTS - 4:
                 raise
-    raise Exception("Stable Horde 排隊逾時（3分鐘），請稍後重試")
+            progress_placeholder.warning(f"⚠️ 網路逾時，重試中... ({attempt + 1}/{MAX_ATTEMPTS})")
+    progress_placeholder.empty()
+    raise Exception("Stable Horde 排隊逾時（6分鐘），請稍後重試或改用 Imagen 4 引擎")
 
 
 # --- UI ---
